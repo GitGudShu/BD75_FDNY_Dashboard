@@ -67,11 +67,10 @@ def date_key_from_dt(s: pd.Series) -> pd.Series:
     return (d.dt.year * 10000 + d.dt.month * 100 + d.dt.day).astype("Int32")
 
 
-def export_parquet(df: pd.DataFrame, out_path: str | Path) -> None:
+def export_csv(df: pd.DataFrame, out_path: str | Path) -> None:
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(out_path, index=False)
-
+    df.to_csv(out_path, index=False)
 
 # ---------- staging step ----------
 def make_staging(
