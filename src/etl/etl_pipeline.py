@@ -33,7 +33,10 @@ LOC_COLS = [
     "CONGRESSIONALDISTRICT",
 ]
 
-OUTPUT_DIR = Path("powerbi_parquet")
+# Determine project root
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DATA_RAW = PROJECT_ROOT / "data" / "raw"
+OUTPUT_DIR = PROJECT_ROOT / "data" / "processed" / "powerbi_parquet"
 
 def norm_text(s: pd.Series) -> pd.Series:
     return s.astype("string").str.strip().str.upper()
@@ -85,13 +88,13 @@ def get_season(date: pd.Series) -> pd.Series:
 def load_data():
     print("Loading data...")
     try:
-        ems = pd.read_csv('EMS.csv')
-        fire = pd.read_csv('FIRE.csv')
-        fire_stations = pd.read_csv('Firehouse.csv')
+        ems = pd.read_csv(DATA_RAW / 'EMS.csv')
+        fire = pd.read_csv(DATA_RAW / 'FIRE.csv')
+        fire_stations = pd.read_csv(DATA_RAW / 'Firehouse.csv')
         print(f"Loaded: EMS ({len(ems)} rows), FIRE ({len(fire)} rows), Firehouse ({len(fire_stations)} rows)")
         return ems, fire, fire_stations
     except FileNotFoundError as e:
-        print(f"Error: {e}. Please ensure CSV files are in the current directory.")
+        print(f"Error: {e}. Please ensure CSV files are in the data/raw directory.")
         return None, None, None
 
 def make_staging(ems, fire):
