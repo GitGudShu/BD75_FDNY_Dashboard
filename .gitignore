@@ -208,6 +208,7 @@ __marimo__/
 
 powerbi_parquet/
 *.csv
+*.parquet
 *.pbix
 *.geojson
 *.topojson
