@@ -212,3 +212,9 @@ powerbi_parquet/
 *.pbix
 *.geojson
 *.topojson
+*.pbit
+*.xlsx
+*.xlsm
+*.xlsb
+*.xls
+*.pdf
