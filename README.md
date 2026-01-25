@@ -1,6 +1,6 @@
 # FDNY Operational Response Analysis
-## Group members
 
+**Group Members:**
 * Thibault Lebreuil
 * Thomas Chu
 
@@ -28,40 +28,30 @@ Download the datasets from NYC Open Data:
 
 ---
 
-## File setup
+## How to Run
 
-After downloading, rename the CSV files exactly as follows:
+### 1. Setup
+Place the raw CSV files in `data/raw/`:
+*   `EMS.csv`
+*   `FIRE.csv`
+*   `Firehouse.csv`
 
-* `EMS.csv`
-* `FIRE.csv`
-* `Firehouse.csv`
-
-Place all three files next to the notebook in the root.
-
----
-
-## Run
-
-Run the notebook:
-
-**`fdny_galaxy_model_export.ipynb`**
-
-It cleans the data, builds fact and dimension tables, and exports everything as Parquet.
-
----
-
-## Output
-
-After execution, you should get a folder:
-
-```
-powerbi_parquet/
+### 2. Execution
+Run the main ETL pipeline:
+```bash
+python src/etl/etl_pipeline_galaxy.py
 ```
 
-It contains all fact and dimension tables as **.parquet** files, ready to import into Power BI.
+### 3. Output
+The script generates optimized **Parquet** files in:
+`data/processed/galaxy_schema/`
+
+These files are ready for direct import into Power BI.
 
 ---
 
-## Power BI
-
-Import the Parquet files, create relationships, build measures `to be continued....`
+## Analysis Modules
+While the primary goal is Power BI preparation, this repository includes Python scripts in `src/analysis/` to validate the model and generate advanced operational insights:
+*   **Temporal**: Trends, Shift Changes, and Weather Impact.
+*   **Geographic**: Hotspot mapping and Speed Trap analysis.
+*   **Operational**: Efficiency metrics and Triage accuracy (Sankey diagrams).
