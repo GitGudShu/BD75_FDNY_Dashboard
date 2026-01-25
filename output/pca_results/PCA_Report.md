@@ -56,6 +56,14 @@ The Correlation Circle below is striking. The vectors for "Incident Counts" poin
 
 ![Neighborhood Correlation Circle](/output/pca_results/neighborhoods/neighborhoods_corr_circle_pc1_pc2.png)
 
+### Borough Dynamics
+We have enhanced the individual projection by coloring neighborhoods according to their **Borough**. This reveals interesting geographical clusters:
+*   **Staten Island**: Typically forms a distinct cluster (often in the "Quiet" but sometimes "Slower" zones due to geography).
+*   **Manhattan**: Concentrated in the high-activity zones.
+*   **Bronx/Brooklyn/Queens**: Spread across the spectrum, reflecting the diverse nature of these boroughs from dense urban centers to quieter residential areas.
+
+The visual separation of these boroughs on the plot further emphasizes that operational challenges are often localized and borough-specific.
+
 ### Neighborhood Clusters
 We can classify neighborhoods into four distinct categories based on the plot below:
 *   **Efficient Hubs (Bottom Right)**: High volume, fast response. Ideally staffed.

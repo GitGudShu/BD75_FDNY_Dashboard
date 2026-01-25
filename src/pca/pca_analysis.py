@@ -125,14 +125,23 @@ class PCAAnalyzer:
         plt.close()
         return save_path
 
-    def plot_individuals(self, x_comp=0, y_comp=1, title_prefix="", labels=None):
-        """Plots projection of individuals."""
-        plt.figure(figsize=(10, 8))
+    def plot_individuals(self, x_comp=0, y_comp=1, title_prefix="", labels=None, groups=None):
+        """Plots projection of individuals using distinct colors for groups if provided."""
+        plt.figure(figsize=(12, 10))
         
         x_vals = self.pca_data[:, x_comp]
         y_vals = self.pca_data[:, y_comp]
         
-        plt.scatter(x_vals, y_vals, alpha=0.6, c='blue')
+        if groups is not None:
+            # Create a dataframe for easy plotting with seaborn
+            temp_df = pd.DataFrame({
+                'x': x_vals,
+                'y': y_vals,
+                'Group': groups
+            })
+            sns.scatterplot(data=temp_df, x='x', y='y', hue='Group', alpha=0.7, palette='tab10', s=100)
+        else:
+            plt.scatter(x_vals, y_vals, alpha=0.6, c='blue')
         
         if labels is not None:
              # Limit labels if too many
@@ -142,15 +151,25 @@ class PCAAnalyzer:
                  for i, label in enumerate(labels):
                      plt.text(x_vals[i], y_vals[i], str(label), fontsize=8, alpha=0.7)
              else:
-                 # Label a few random or extremes?
-                 pass
+                 # Label extremes (top 5 furthest from origin)
+                 # Distances
+                 dists = np.sqrt(x_vals**2 + y_vals**2)
+                 # Get indices of top 10
+                 top_indices = np.argsort(dists)[-10:]
+                 for i in top_indices:
+                     plt.text(x_vals[i], y_vals[i], str(labels[i]), fontsize=9, fontweight='bold')
 
         plt.xlabel(f'PC{x_comp+1} ({self.explained_variance_ratio[x_comp]*100:.1f}%)')
         plt.ylabel(f'PC{y_comp+1} ({self.explained_variance_ratio[y_comp]*100:.1f}%)')
         plt.title(f'{title_prefix} Individuals Projection (PC{x_comp+1} & PC{y_comp+1})')
         plt.axhline(0, color='grey', linestyle='--', linewidth=0.8)
         plt.axvline(0, color='grey', linestyle='--', linewidth=0.8)
-        plt.grid()
+        plt.grid(True, linestyle='--', alpha=0.6)
+        
+        # Move legend if exists
+        if groups is not None:
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.tight_layout()
         
         save_path = os.path.join(self.output_dir, f'{title_prefix.lower().replace(" ", "_")}_individuals_pc{x_comp+1}_pc{y_comp+1}.png')
         plt.savefig(save_path)

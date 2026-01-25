@@ -48,17 +48,34 @@ def main():
     
     # Plots
     print("\nGenerating Plots...")
+    
+    # Load Mapping
+    mapping_path = os.path.join(project_root, 'data', 'processed', 'zip_borough_mapping.csv')
+    if os.path.exists(mapping_path):
+        print(f"Loading mapping from {mapping_path}")
+        mapping_df = pd.read_csv(mapping_path)
+        # Create a dictionary for fast lookup
+        zip_to_borough = dict(zip(mapping_df['ZIPCODE'], mapping_df['BOROUGH']))
+        
+        # Get groups for current indices
+        current_zips = analyzer.raw_df.index.tolist()
+        groups = [zip_to_borough.get(z, 'Unknown') for z in current_zips]
+        print(f"Matched boroughs for {len(groups)} zipcodes.")
+    else:
+        print("Mapping file not found. Skipping borough coloring.")
+        groups = None
+
     analyzer.plot_correlation_circle(0, 1, title_prefix="Neighborhoods")
     
     # For individuals, use the index (ZIPCODE) as labels
     labels = analyzer.raw_df.index.tolist()
-    analyzer.plot_individuals(0, 1, title_prefix="Neighborhoods", labels=labels)
+    analyzer.plot_individuals(0, 1, title_prefix="Neighborhoods", labels=labels, groups=groups)
     
     # Check if we need more dimensions
     if analyzer.cumulative_variance[1] < 0.60:
         print("First two components explain less than 60%. Checking further...")
         analyzer.plot_correlation_circle(0, 2, title_prefix="Neighborhoods")
-        analyzer.plot_individuals(0, 2, title_prefix="Neighborhoods", labels=labels)
+        analyzer.plot_individuals(0, 2, title_prefix="Neighborhoods", labels=labels, groups=groups)
         
     print("Neighborhood Analysis Complete. Results in:", output_dir)
 
