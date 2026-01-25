@@ -251,6 +251,12 @@ def build_facts(ems, fire, dim_time, dim_location, dim_type, dim_weather):
             
     fact_ems_out["nb_interventions"] = 1
     
+    # ADDED FOR SANKEY ANALYSIS
+    if "INITIAL_CALL_TYPE" in f_ems.columns:
+        fact_ems_out["initial_call_type"] = f_ems["INITIAL_CALL_TYPE"]
+    if "FINAL_CALL_TYPE" in f_ems.columns:
+        fact_ems_out["final_call_type"] = f_ems["FINAL_CALL_TYPE"]
+    
     # --- FACT FIRE ---
     print("  Processing FIRE...")
     f_fire = fire.copy()
@@ -283,6 +289,11 @@ def build_facts(ems, fire, dim_time, dim_location, dim_type, dim_weather):
     for c in ["ENGINES_ASSIGNED_QUANTITY", "LADDERS_ASSIGNED_QUANTITY", "OTHER_UNITS_ASSIGNED_QUANTITY"]:
         if c in f_fire.columns:
             fact_fire_out[c.lower()] = pd.to_numeric(f_fire[c], errors="coerce").fillna(0).astype("int16")
+            
+    # Pre-calculate Total Units
+    fact_fire_out["total_units"] = (fact_fire_out["engines_assigned_quantity"] + 
+                                    fact_fire_out["ladders_assigned_quantity"] + 
+                                    fact_fire_out["other_units_assigned_quantity"])
             
     # Measures (Time) - Normalized names
     # Fire might calculate fields differently or have different names?
