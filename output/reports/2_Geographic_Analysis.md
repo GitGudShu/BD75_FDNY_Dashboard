@@ -10,7 +10,7 @@ This updated report includes advanced geospatial visualizations to identify cove
 ![Speed Trap](/output/figures/geographic_v2/speed_trap_map.png)
 > Note for Thib: **10/10** Well f-ing yeah, we can clearly see the "Inequality of Safety". Look at the contrast: Manhattan is a swarm of massive activity (huge rings) but the ground underneath is mostly green/yellow, the system is stressed but holding. Compare that to the Rockaways (that strip at the very bottom) or parts of Eastern Queens: tiny rings but dark orange/red ground. This tells the Chief immediately that those people aren't waiting because the system is busy; they are waiting because they are isolated. I think ?
 
-*Insight*: Look for **Large Blue Bubbles on Red Backgrounds**. These are your "Crisis Zones", high demand areas where the system is failing (slow response). Conversely, small bubbles on red backgrounds might be remote areas where speed is sacrificed for coverage efficiency.
+*Insight*: Look for **Large 'radar looking thing' on Red Backgrounds**. These are your "Crisis Zones", high demand areas where the system is failing (slow response). Conversely, you can also argue for the relevency of small radars on red backgrounds might be remote areas where speed is sacrificed for coverage efficiency.
 
 ## 2. Station Reach: Voronoi Territories
 **Concept**: Theoretical vs Actual Coverage.
