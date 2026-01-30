@@ -50,6 +50,30 @@ These files are ready for direct import into Power BI.
 
 ---
 
+## Updating the Data
+
+To refresh the dataset with the latest information (e.g., new months of data), follow this pipeline:
+
+1.  **Download latest datasets** from the [Data Sources](#data-sources) links above:
+    *   `EMS.csv`
+    *   `FIRE.csv`
+    *   `Firehouse.csv` (if updated)
+    *   *Place these files in `data/raw/`, overwriting the old ones.*
+
+2.  **Fetch latest weather data**:
+    ```bash
+    python src/etl/fetch_weather.py
+    ```
+    *This downloads historical weather data for NYC to `data/raw/weather_nyc.csv`.*
+
+3.  **Run the ETL pipeline**:
+    ```bash
+    python src/etl/etl_pipeline_galaxy.py
+    ```
+    *This processes the new raw files and regenerates the Parquet files in `data/processed/galaxy_schema/`.*
+
+---
+
 ## Analysis Modules
 While the primary goal is Power BI preparation, this repository includes Python scripts in `src/analysis/` to validate the model and generate advanced operational insights:
 *   **Temporal**: Trends, Shift Changes, and Weather Impact.
