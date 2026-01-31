@@ -6,43 +6,61 @@ import plotly.graph_objects as go
 import os
 from pathlib import Path
 
-# --- CONFIG ---
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed" / "galaxy_schema"
-OUTPUT_FIG = PROJECT_ROOT / "output" / "figures" / "operational" # Updated folder name
+OUTPUT_FIG = PROJECT_ROOT / "output" / "figures" / "operational"
 OUTPUT_REPORT = PROJECT_ROOT / "output" / "reports"
 
 OUTPUT_FIG.mkdir(parents=True, exist_ok=True)
 OUTPUT_REPORT.mkdir(parents=True, exist_ok=True)
 
-# Set global style
 sns.set_style("whitegrid")
 plt.rcParams['figure.dpi'] = 150
 
 def load_data():
+    """
+    Loads operational datasets required for analysis.
+    
+    This function reads parquet files to load incident type dimensions, and both Fire and EMS incident facts.
+    It selects specific columns relevant to operational analysis such as dispatch time, travel time,
+    and unit assignments.
+        
+    Returns:
+        tuple: A tuple containing:
+            - dim_incident_type (pd.DataFrame): Incident type dimensions.
+            - f_fire (pd.DataFrame): Fire incident facts with resource usage data.
+            - f_ems (pd.DataFrame): EMS incident facts with call type classifications.
+    """
     print("Loading data...")
     dim_incident_type = pd.read_parquet(DATA_DIR / "Dim_IncidentType.parquet")
     
     cols_fire = ["date_key", "hour", "incident_type_key", "dispatch_time", "travel_time", 
                  "engines_assigned_quantity", "other_units_assigned_quantity", "ladders_assigned_quantity", "total_units"]
     
-    # Load EMS with new columns
     cols_ems = ["date_key", "hour", "incident_type_key", "dispatch_time", "travel_time", "initial_call_type", "final_call_type"]
     
     f_fire = pd.read_parquet(DATA_DIR / "Fact_Incidents_Fire.parquet", columns=cols_fire)
     f_ems = pd.read_parquet(DATA_DIR / "Fact_Incidents_EMS.parquet", columns=cols_ems)
     
-    # Calculate Total Units for Fire (Main resource drain)
-    # f_fire["total_units"] is now pre-calculated in ETL
-    
     return dim_incident_type, f_fire, f_ems
 
 def analyze_reality_gap_sankey(f_ems):
+    """
+    Generates a Sankey diagram visualizing dispatch misclassifications.
+    
+    The analysis tracks the 'Reality Gap' by comparing the initial call type (how it was dispatched) 
+    versus the final call type (what it actually was). It filters for instances where these do not match, 
+    identifying the top 20 most frequent misclassifications.
+    
+    Parameters:
+        f_ems (pd.DataFrame): EMS incident data containing 'initial_call_type' and 'final_call_type'.
+        
+    Returns:
+        None: Saves the generated figure 'reality_gap_sankey_errors.png' to the output directory.
+    """
     print("Running Reality Gap (Sankey) - MISCLASSIFICATIONS ONLY...")
     
     try:
-        # 1. Filter: Keep ONLY rows where the Initial type DOES NOT MATCH the Final type
-        # Drop missing values
         clean_ems = f_ems.dropna(subset=["initial_call_type", "final_call_type"])
         mismatches = clean_ems[clean_ems["initial_call_type"] != clean_ems["final_call_type"]].copy()
         
@@ -50,17 +68,13 @@ def analyze_reality_gap_sankey(f_ems):
             print("No mismatches found. Check data.")
             return
 
-        # 2. Group & Count the Mismatches
         flow = mismatches.groupby(["initial_call_type", "final_call_type"]).size().reset_index(name="value")
         
-        # 3. Filter Top 20 Mismatches (Now these are the "Top Errors")
         flow = flow.sort_values("value", ascending=False).head(20)
         
-        # 4. Add suffixes to ensure distinct nodes (Left vs Right)
         flow['source_label'] = flow['initial_call_type'] + " (Dispatched As)"
         flow['target_label'] = flow['final_call_type'] + " (Actually Was)"
         
-        # 5. Create Node Map
         all_nodes = list(pd.concat([flow['source_label'], flow['target_label']]).unique())
         node_map = {name: i for i, name in enumerate(all_nodes)}
         
@@ -68,20 +82,17 @@ def analyze_reality_gap_sankey(f_ems):
         target_indices = flow['target_label'].map(node_map)
         values = flow['value']
         
-        # 6. Plot
         fig = go.Figure(data=[go.Sankey(
             node=dict(
                 pad=20,
                 thickness=30,
                 line=dict(color="black", width=0.5),
                 label=all_nodes,
-                # color="blue" # Removed to allow default palette
             ),
             link=dict(
                 source=source_indices,
                 target=target_indices,
                 value=values,
-                # color='rgba(231, 76, 60, 0.4)' # Removed to allow default palette (or grey)
             )
         )])
         
@@ -98,46 +109,43 @@ def analyze_reality_gap_sankey(f_ems):
 
 def analyze_stress_test_binned(f_fire):
     """
-    IMPROVEMENT: Uses Binning instead of Scatter plot.
-    Groups hourly data into buckets of 20 units to show the clear trend line.
+    Analyzes system performance under load using binned aggregation.
+    
+    This method performs a 'stress test' by grouping hourly data into bins based on total units deployed 
+    (system load). It then calculates the average dispatch time for each load bin to reveal how 
+    performance degrades as the system approaches saturation.
+    
+    Parameters:
+        f_fire (pd.DataFrame): Fire incident data containing 'total_units' and 'dispatch_time'.
+        
+    Returns:
+        None: Saves the generated figure 'stress_test_binned.png' to the output directory.
     """
     print("Running Stress Test (Binned Analysis)...")
     
-    # 1. Agg: Hourly Total Units vs Avg Dispatch Time
     agg = f_fire.groupby(["date_key", "hour"]).agg({
         "total_units": "sum",
         "dispatch_time": "mean"
     }).reset_index()
     
-    # Filter valid
     agg = agg[(agg["dispatch_time"] < 600) & (agg["total_units"] > 0)]
     
-    # 2. THE FIX: Create Bins
-    # We bin the "Total Units" (Load) into buckets of 20 units (0-20, 20-40, etc.)
-    # This removes noise and shows the structural limit of the system.
     bins = range(0, int(agg["total_units"].max()) + 20, 20)
     agg["load_bin"] = pd.cut(agg["total_units"], bins=bins)
     
-    # Calculate mean dispatch time per bin
     binned_data = agg.groupby("load_bin", observed=True)["dispatch_time"].mean().reset_index()
     
-    # Convert bin intervals to string or mid-point for plotting
     binned_data["bin_mid"] = binned_data["load_bin"].apply(lambda x: x.mid)
     
     plt.figure(figsize=(12, 7))
     
-    # Plot Line Chart
     sns.lineplot(data=binned_data, x="bin_mid", y="dispatch_time", marker="o", linewidth=2.5, color="#e74c3c")
     
-    # Add a threshold line (optional, purely visual based on observation)
-    # plt.axvline(x=300, color='grey', linestyle='--', alpha=0.5, label="Potential Saturation Point")
-
     plt.title("The Stress Test: System Saturation Curve", fontsize=14)
     plt.xlabel("Total Units Deployed (Hourly System Load)", fontsize=12)
     plt.ylabel("Avg Dispatch Time (Seconds)", fontsize=12)
     plt.grid(True, linestyle="--", alpha=0.7)
     
-    # Annotation
     plt.text(binned_data["bin_mid"].iloc[-1], binned_data["dispatch_time"].iloc[-1] + 2, 
              "Performance degrades\nunder load", color="#e74c3c", fontweight='bold')
 
@@ -147,40 +155,37 @@ def analyze_stress_test_binned(f_fire):
 
 def analyze_resource_consumption(f_fire, dim_incident_type):
     """
-    NEW CHART: Replaces 'Anatomy of Delay'.
-    Calculates Total Resource Cost (Units * Duration) per Incident Type.
+    Identifies the most resource-intensive incident types.
+    
+    This function calculates the total "Active System Seconds" consumed by each incident type.
+    The cost is derived from the number of units assigned multiplied by the active duration 
+    (dispatch + travel time). It produces a bar chart of the top 10 resource-consuming incident types.
+    
+    Parameters:
+        f_fire (pd.DataFrame): Fire incident data.
+        dim_incident_type (pd.DataFrame): Incident type dimension data.
+        
+    Returns:
+        None: Saves the generated figure 'resource_consumption_bar.png' to the output directory.
     """
     print("Running Resource Consumption Analysis...")
     
-    # 1. Merge to get descriptions
-    # Note: Ensure your dim_incident_type has 'incident_type_desc' or similar
     merged = f_fire.merge(dim_incident_type, on="incident_type_key")
     
-    # 2. Calculate Resource Cost
-    # Cost = Units Assigned * (Dispatch Time + Travel Time)
-    # This represents "Active System Seconds" consumed.
     merged["active_duration"] = merged["dispatch_time"].fillna(0) + merged["travel_time"].fillna(0)
     merged["resource_cost_seconds"] = merged["total_units"] * merged["active_duration"]
-    
-    # 3. Agg by Type
+
     summary = merged.groupby("category")["resource_cost_seconds"].sum().reset_index()
-    
-    # Convert to Hours for readability
     summary["resource_hours"] = summary["resource_cost_seconds"] / 3600
     
-    # Get Top 10 Consumers
     top_consumers = summary.sort_values("resource_hours", ascending=False).head(10)
-    
     plt.figure(figsize=(12, 6))
-    
-    # Horizontal Bar Chart
     sns.barplot(data=top_consumers, x="resource_hours", y="category", palette="viridis", hue="category", legend=False)
     
     plt.title("The Resource Hog: Total Operational Capacity Consumed by Incident Type", fontsize=14)
     plt.xlabel("Total Unit-Hours Consumed (Units * Duration)", fontsize=12)
     plt.ylabel("")
     
-    # Add value labels
     for i, v in enumerate(top_consumers["resource_hours"]):
         plt.text(v + (v*0.01), i, f"{int(v):,}", va='center', fontsize=10)
         
@@ -189,6 +194,13 @@ def analyze_resource_consumption(f_fire, dim_incident_type):
     plt.close()
 
 def main():
+    """
+    Main entry point for the operational analysis script.
+    
+    Orchestrates the loading of data and execution of three primary analyses:
+    Reality Gap (Sankey), Stress Test (Binned Curve), and Resource Consumption (Bar Chart).
+    It handles exceptions during execution to ensure robust reporting.
+    """
     try:
         dim_incident_type, f_fire, f_ems = load_data()
         
