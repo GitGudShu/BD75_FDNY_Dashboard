@@ -8,7 +8,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data" / "processed" / "galaxy_schema"
-OUTPUT_FIG = PROJECT_ROOT / "output" / "figures" / "temporal"
+OUTPUT_FIG = PROJECT_ROOT / "output" / "figures" / "temporalv7"
 OUTPUT_REPORT = PROJECT_ROOT / "output" / "reports"
 
 OUTPUT_FIG.mkdir(parents=True, exist_ok=True)

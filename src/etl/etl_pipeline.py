@@ -39,9 +39,27 @@ DATA_RAW = PROJECT_ROOT / "data" / "raw"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "processed" / "powerbi_parquet"
 
 def norm_text(s: pd.Series) -> pd.Series:
+    """
+    Normalize text series by stripping whitespace and converting to uppercase.
+
+    Args:
+        s (pd.Series): Input text series.
+
+    Returns:
+        pd.Series: Normalized text series.
+    """
     return s.astype("string").str.strip().str.upper()
 
 def norm_borough(s: pd.Series) -> pd.Series:
+    """
+    Normalize borough names, standardizing variations of Staten Island.
+
+    Args:
+        s (pd.Series): Input borough series.
+
+    Returns:
+        pd.Series: Normalized borough series.
+    """
     x = norm_text(s)
     return x.replace(
         {
@@ -52,29 +70,68 @@ def norm_borough(s: pd.Series) -> pd.Series:
     )
 
 def clean_seconds(s: pd.Series) -> pd.Series:
+    """
+    Clean duration columns by handling negative values and excessive outliers.
+
+    Args:
+        s (pd.Series): Input numeric series (seconds).
+
+    Returns:
+        pd.Series: Cleaned numeric series.
+    """
     x = pd.to_numeric(s, errors="coerce")
     x = x.mask(x < 0, np.nan)
     x = x.mask(x >= 999, np.nan)
     return x
 
 def parse_dt(s: pd.Series) -> pd.Series:
+    """
+    Parse datetime series with specific formatting.
+
+    Args:
+        s (pd.Series): Input datetime string series.
+
+    Returns:
+        pd.Series: Parsed datetime series.
+    """
     return pd.to_datetime(s, format="%m/%d/%Y %I:%M:%S %p", errors="coerce")
 
 def date_key_from_dt(s: pd.Series) -> pd.Series:
+    """
+    Generate an integer date key (YYYYMMDD) from a datetime series.
+
+    Args:
+        s (pd.Series): Input datetime series.
+
+    Returns:
+        pd.Series: Integer date keys.
+    """
     d = s.dt.floor("D")
     return (d.dt.year * 10000 + d.dt.month * 100 + d.dt.day).astype("Int32")
 
 def get_fiscal_year(date: pd.Series) -> pd.Series:
-    # NYC Fiscal Year starts July 1st.
-    # If month >= 7, FY = Year + 1, else FY = Year
+    """
+    Calculate the NYC fiscal year for a given date.
+    Fiscal Year starts July 1st.
+
+    Args:
+        date (pd.Series): Input datetime series.
+
+    Returns:
+        pd.Series: Fiscal year.
+    """
     return np.where(date.dt.month >= 7, date.dt.year + 1, date.dt.year)
 
 def get_season(date: pd.Series) -> pd.Series:
-    # Northern Hemisphere seasons
-    # Winter: Dec, Jan, Feb
-    # Spring: Mar, Apr, May
-    # Summer: Jun, Jul, Aug
-    # Fall: Sep, Oct, Nov
+    """
+    Determine the season for a given date based on Northern Hemisphere logic.
+
+    Args:
+        date (pd.Series): Input datetime series.
+
+    Returns:
+        pd.Series: Season name (Winter, Spring, Summer, Fall).
+    """
     month = date.dt.month
     conditions = [
         (month.isin([12, 1, 2])),
@@ -86,6 +143,12 @@ def get_season(date: pd.Series) -> pd.Series:
     return pd.Series(np.select(conditions, choices, default='Unknown'), index=date.index)
 
 def load_data():
+    """
+    Load raw CSV data for EMS, Fire, and Firehouse datasets.
+
+    Returns:
+        tuple: (ems, fire, fire_stations) pandas DataFrames, or (None, None, None) on failure.
+    """
     print("Loading data...")
     try:
         ems = pd.read_csv(DATA_RAW / 'EMS.csv')
@@ -98,15 +161,23 @@ def load_data():
         return None, None, None
 
 def make_staging(ems, fire):
+    """
+    Create staging dataframes by normalizing boroughs, parsing datetimes, and cleaning measures.
+
+    Args:
+        ems (pd.DataFrame): Raw EMS data.
+        fire (pd.DataFrame): Raw FIRE data.
+
+    Returns:
+        tuple: (ems_c, fire_c) cleaned pandas DataFrames.
+    """
     print("Creating staging tables...")
     ems_c = ems.copy()
     fire_c = fire.copy()
 
-    # Normalize Boroughs
     ems_c["BOROUGH_NORM"] = norm_borough(ems_c["BOROUGH"]) if "BOROUGH" in ems_c.columns else pd.NA
     fire_c["BOROUGH_NORM"] = norm_borough(fire_c["INCIDENT_BOROUGH"]) if "INCIDENT_BOROUGH" in fire_c.columns else pd.NA
 
-    # Parse Datetimes
     print("Parsing datetimes...")
     for c in DT_COLS_COMMON + DT_COLS_EMS_EXTRA:
         if c in ems_c.columns:
@@ -115,7 +186,6 @@ def make_staging(ems, fire):
         if c in fire_c.columns:
             fire_c[c] = parse_dt(fire_c[c])
 
-    # Clean Measures
     print("Cleaning measures...")
     for c in MEASURE_COLS_SHARED:
         if c in ems_c.columns:
@@ -126,6 +196,17 @@ def make_staging(ems, fire):
     return ems_c, fire_c
 
 def build_dim_time(ems_c, fire_c, datetime_cols):
+    """
+    Build the Time Dimension table from all available datetime columns.
+
+    Args:
+        ems_c (pd.DataFrame): Staged EMS data.
+        fire_c (pd.DataFrame): Staged FIRE data.
+        datetime_cols (list): List of datetime columns to harvest dates from.
+
+    Returns:
+        pd.DataFrame: Dimension Time table.
+    """
     print("Building Dim_Time...")
     dts = []
     for df in (ems_c, fire_c):
@@ -158,6 +239,17 @@ def build_dim_time(ems_c, fire_c, datetime_cols):
     return dim
 
 def build_dim_location(ems_c, fire_c, loc_cols=LOC_COLS):
+    """
+    Build the Location Dimension table by extracting unique location attributes.
+
+    Args:
+        ems_c (pd.DataFrame): Staged EMS data.
+        fire_c (pd.DataFrame): Staged FIRE data.
+        loc_cols (list): List of location columns to consider.
+
+    Returns:
+        pd.DataFrame: Dimension Location table.
+    """
     print("Building Dim_Location...")
     parts = []
     for df in (ems_c, fire_c):
@@ -177,12 +269,20 @@ def build_dim_location(ems_c, fire_c, loc_cols=LOC_COLS):
     return dim
 
 def build_dim_firehouse(firehouses):
+    """
+    Build the Firehouse Dimension table.
+
+    Args:
+        firehouses (pd.DataFrame): Raw Firehouse data.
+
+    Returns:
+        pd.DataFrame: Dimension Firehouse table.
+    """
     print("Building Dim_Firehouse...")
     fh = firehouses.copy()
     if "Borough" in fh.columns:
         fh["Borough_Norm"] = norm_borough(fh["Borough"])
     
-    # Ensure Postcode is string for joining
     if "Postcode" in fh.columns:
          fh["Postcode"] = pd.to_numeric(fh["Postcode"], errors='coerce').astype("Int64")
 
@@ -191,20 +291,36 @@ def build_dim_firehouse(firehouses):
     return dim
 
 def build_bridge_zip_firehouse(dim_firehouse):
+    """
+    Build a Bridge table linking Zipcodes to Firehouses.
+    This allows many-to-many relationship handling between Incidents (Zip) and Firehouses.
+
+    Args:
+        dim_firehouse (pd.DataFrame): Dimension Firehouse table.
+
+    Returns:
+        pd.DataFrame: Bridge table.
+    """
     print("Building Bridge_Zip_Firehouse...")
-    # This bridge links Zipcodes (from Incidents) to Firehouses.
-    # Multiple firehouses can share a Zipcode.
-    # Incidents in that zipcode will map to these firehouses.
     
     bridge = dim_firehouse[["firehouse_key", "Postcode", "Borough_Norm"]].dropna(subset=["Postcode"]).copy()
     bridge.rename(columns={"Postcode": "ZIPCODE", "Borough_Norm": "BOROUGH_NORM"}, inplace=True)
     
-    # We want unique pairs of Firehouse -> Zip
     bridge = bridge.drop_duplicates().reset_index(drop=True)
     
     return bridge
 
 def build_small_dims(ems_c, fire_c):
+    """
+    Build small dimension tables for various categorical codes.
+
+    Args:
+        ems_c (pd.DataFrame): Staged EMS data.
+        fire_c (pd.DataFrame): Staged FIRE data.
+
+    Returns:
+        dict: Dictionary of dimension names to DataFrames.
+    """
     print("Building Small Dims...")
     dims = {}
 
@@ -214,14 +330,12 @@ def build_small_dims(ems_c, fire_c):
         dim.insert(0, key_name, (np.arange(len(dim)) + 1).astype("int32"))
         return dim
 
-    # EMS Dims
     dims["dim_ems_initial_call_type"] = build_one(ems_c, "INITIAL_CALL_TYPE", "ems_initial_call_type_key")
     dims["dim_ems_final_call_type"] = build_one(ems_c, "FINAL_CALL_TYPE", "ems_final_call_type_key")
     dims["dim_ems_initial_severity"] = build_one(ems_c, "INITIAL_SEVERITY_LEVEL_CODE", "ems_initial_severity_key")
     dims["dim_ems_final_severity"] = build_one(ems_c, "FINAL_SEVERITY_LEVEL_CODE", "ems_final_severity_key")
     dims["dim_ems_disposition"] = build_one(ems_c, "INCIDENT_DISPOSITION_CODE", "ems_disposition_key")
 
-    # Fire Dims
     dims["dim_fire_class_group"] = build_one(fire_c, "INCIDENT_CLASSIFICATION_GROUP", "fire_class_group_key")
     dims["dim_fire_class"] = build_one(fire_c, "INCIDENT_CLASSIFICATION", "fire_class_key")
     dims["dim_fire_alarm_source"] = build_one(fire_c, "ALARM_SOURCE_DESCRIPTION_TX", "fire_alarm_source_key")
@@ -230,6 +344,17 @@ def build_small_dims(ems_c, fire_c):
     return {k: v for k, v in dims.items() if v is not None}
 
 def attach_location_key(df, dim_location, loc_cols=LOC_COLS):
+    """
+    Attach location surrogate keys to a fact table.
+
+    Args:
+        df (pd.DataFrame): Fact table (staging).
+        dim_location (pd.DataFrame): Dimension Location table.
+        loc_cols (list): Location columns to match on.
+
+    Returns:
+        pd.Series: Location keys.
+    """
     use = [c for c in loc_cols if c in df.columns]
     left = df[use].copy()
     for c in left.columns:
@@ -246,12 +371,35 @@ def attach_location_key(df, dim_location, loc_cols=LOC_COLS):
     return merged["location_key"]
 
 def attach_dim_key(df, dim, col, key_col):
+    """
+    Attach a generic dimension surrogate key to a fact table.
+
+    Args:
+        df (pd.DataFrame): Fact table.
+        dim (pd.DataFrame): Dimension table.
+        col (str): Column name to match.
+        key_col (str): Key column name in dimension.
+
+    Returns:
+        pd.Series: Surrogate keys.
+    """
     if dim is None or col not in df.columns:
         return pd.Series(pd.array([pd.NA] * len(df), dtype="Int32"))
     tmp = pd.DataFrame({col: norm_text(df[col])})
     return tmp.merge(dim[[col, key_col]], on=col, how="left")[key_col].astype("Int32")
 
 def build_fact_ems(ems_c, dim_location, dims_other):
+    """
+    Build the EMS Fact table.
+
+    Args:
+        ems_c (pd.DataFrame): Staged EMS data.
+        dim_location (pd.DataFrame): Dimension Location table.
+        dims_other (dict): Dictionary of other small dimensions.
+
+    Returns:
+        pd.DataFrame: Fact EMS table.
+    """
     print("Building Fact_Incident_EMS...")
     fact = pd.DataFrame({
         "ems_incident_id": ems_c["CAD_INCIDENT_ID"].astype("int64"),
@@ -262,13 +410,11 @@ def build_fact_ems(ems_c, dim_location, dims_other):
     print("  Attaching Location Keys...")
     fact["location_key"] = attach_location_key(ems_c, dim_location)
 
-    # Measures
     for c in MEASURE_COLS_SHARED:
         cc = c + "_CLEAN"
         if cc in ems_c.columns:
             fact[c.lower() + "_seconds"] = ems_c[cc]
 
-    # Keys to small dims
     print("  Attaching Small Dim Keys...")
     fact["ems_initial_call_type_key"] = attach_dim_key(ems_c, dims_other.get("dim_ems_initial_call_type"), "INITIAL_CALL_TYPE", "ems_initial_call_type_key")
     fact["ems_final_call_type_key"] = attach_dim_key(ems_c, dims_other.get("dim_ems_final_call_type"), "FINAL_CALL_TYPE", "ems_final_call_type_key")
@@ -276,7 +422,6 @@ def build_fact_ems(ems_c, dim_location, dims_other):
     fact["ems_final_severity_key"] = attach_dim_key(ems_c, dims_other.get("dim_ems_final_severity"), "FINAL_SEVERITY_LEVEL_CODE", "ems_final_severity_key")
     fact["ems_disposition_key"] = attach_dim_key(ems_c, dims_other.get("dim_ems_disposition"), "INCIDENT_DISPOSITION_CODE", "ems_disposition_key")
 
-    # Flags
     for flag in ["HELD_INDICATOR", "REOPEN_INDICATOR", "SPECIAL_EVENT_INDICATOR", "STANDBY_INDICATOR", "TRANSFER_INDICATOR"]:
         if flag in ems_c.columns:
             fact[flag.lower()] = norm_text(ems_c[flag]).replace({"TRUE": "1", "FALSE": "0", "Y": "1", "N": "0"}).astype("string")
@@ -284,6 +429,17 @@ def build_fact_ems(ems_c, dim_location, dims_other):
     return fact
 
 def build_fact_fire(fire_c, dim_location, dims_other):
+    """
+    Build the FIRE Fact table.
+
+    Args:
+        fire_c (pd.DataFrame): Staged FIRE data.
+        dim_location (pd.DataFrame): Dimension Location table.
+        dims_other (dict): Dictionary of other small dimensions.
+
+    Returns:
+        pd.DataFrame: Fact FIRE table.
+    """
     print("Building Fact_Incident_FIRE...")
     fact = pd.DataFrame({
         "fire_incident_id": fire_c["STARFIRE_INCIDENT_ID"].astype("string"),
@@ -294,7 +450,6 @@ def build_fact_fire(fire_c, dim_location, dims_other):
     print("  Attaching Location Keys...")
     fact["location_key"] = attach_location_key(fire_c, dim_location)
 
-    # Measures
     for c in MEASURE_COLS_SHARED:
         cc = c + "_CLEAN"
         if cc in fire_c.columns:
@@ -304,14 +459,12 @@ def build_fact_fire(fire_c, dim_location, dims_other):
         if c in fire_c.columns:
             fact[c.lower()] = pd.to_numeric(fire_c[c], errors="coerce")
 
-    # Keys to small dims
     print("  Attaching Small Dim Keys...")
     fact["fire_class_group_key"] = attach_dim_key(fire_c, dims_other.get("dim_fire_class_group"), "INCIDENT_CLASSIFICATION_GROUP", "fire_class_group_key")
     fact["fire_class_key"] = attach_dim_key(fire_c, dims_other.get("dim_fire_class"), "INCIDENT_CLASSIFICATION", "fire_class_key")
     fact["fire_alarm_source_key"] = attach_dim_key(fire_c, dims_other.get("dim_fire_alarm_source"), "ALARM_SOURCE_DESCRIPTION_TX", "fire_alarm_source_key")
     fact["fire_alarm_level_key"] = attach_dim_key(fire_c, dims_other.get("dim_fire_alarm_level"), "ALARM_LEVEL_INDEX_DESCRIPTION", "fire_alarm_level_key")
 
-    # Degenerate attrs
     for c in ["ALARM_BOX_NUMBER", "ALARM_BOX_LOCATION", "ALARM_BOX_BOROUGH", "HIGHEST_ALARM_LEVEL"]:
         if c in fire_c.columns:
             fact[c.lower()] = fire_c[c]
@@ -319,31 +472,34 @@ def build_fact_fire(fire_c, dim_location, dims_other):
     return fact
 
 def main():
+    """
+    Main ETL execution flow:
+    1. Load data
+    2. Stage data
+    3. Build Dimensions
+    4. Build Bridge
+    5. Build Small Dims
+    6. Build Facts
+    7. Export to Parquet
+    """
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 1. Load Data
     ems, fire, fire_stations = load_data()
     if ems is None: return
 
-    # 2. Stage Data
     ems_c, fire_c = make_staging(ems, fire)
 
-    # 3. Build Dimensions
     dim_time = build_dim_time(ems_c, fire_c, list(set(DT_COLS_COMMON + DT_COLS_EMS_EXTRA)))
     dim_location = build_dim_location(ems_c, fire_c)
     dim_firehouse = build_dim_firehouse(fire_stations)
     
-    # 4. Build Bridge (Firehouse <-> Zip)
     bridge_zip_firehouse = build_bridge_zip_firehouse(dim_firehouse)
     
-    # 5. Build Small Dims
     dims_other = build_small_dims(ems_c, fire_c)
 
-    # 6. Build Facts
     fact_ems = build_fact_ems(ems_c, dim_location, dims_other)
     fact_fire = build_fact_fire(fire_c, dim_location, dims_other)
 
-    # 7. Export to Parquet
     print("Exporting to Parquet...")
     
     tables = {
