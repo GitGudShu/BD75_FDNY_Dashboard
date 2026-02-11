@@ -34,3 +34,4 @@ Formula: `Total Units Assigned * Duration of Incident`.
 *Insight*: **Where is the Budget Going?**
 - A "Structural Fire" might be rare, but if it consumes 10,000 unit-hours, it is the primary driver of fleet wear and overtime costs.
 - Use this to justify budget allocation: "We spend 60% of our operational capacity on Category X."
+
